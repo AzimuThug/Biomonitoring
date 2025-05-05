@@ -16,8 +16,10 @@ class Model:
                  outlier_count: int = 0.0,
                  amplitude: float = 50.0,
                  bpm: int = 72,
-                 ts: int = 50
+                 fps: int = 25,
+                 history_seconds: int = 10
                  ) -> None:
+        self._ax2 = None
         self._width = width
         self._height = height
         self._brightness = brightness
@@ -26,7 +28,8 @@ class Model:
         self._outlier_count = outlier_count
         self._amplitude = amplitude
         self._bpm = bpm
-        self._ts = ts
+        self._fps = fps
+        self._history_seconds = history_seconds
 
     @staticmethod
     def generate_2d_image(width: int = 640,
@@ -58,12 +61,12 @@ class Model:
                         ) -> float:
         """
         Generate a ppg curve
-        :param time: Текущее время (сек)
-        :param bpm: Ударов в минуту (норма: 60-100)
+        :param time: Current time (sec)
+        :param bpm: Beats per minute (60-100)
         :return: value at point x
         """
-        period = 60.0 / bpm  # Длительность одного удара (сек)
-        phase = (time % period) / period  # Фаза в пределах [0, 1]
+        period = 60.0 / bpm
+        phase = (time % period) / period
 
         # Основной пик (систола)
         if phase < 0.2:
@@ -75,104 +78,69 @@ class Model:
         else:
             return 0.4 * np.exp(-10.0 * (phase - 0.3))
 
-    @staticmethod
-    def update_image(frame, img_plot, line_plot, time_history, ppg_history,
-                     width, height, base_brightness, brightness_variation,
-                     max_outliers, outlier_count, amplitude, bpm, fps, history_seconds):
+    def update_image(self, frame, img_plot, line_plot, time_history, ppg_history):
         """Обновление данных для анимации с перегенерацией изображения"""
-        current_time = frame / fps
-        ppg_value = Model.generate_1d_ppg(current_time, bpm)
+        current_time = frame / self._fps
+        ppg_value = Model.generate_1d_ppg(current_time, self._bpm)
 
-        # Генерация нового изображения в каждом кадре
         base_image = Model.generate_2d_image(
-            width, height, base_brightness,
-            brightness_variation, max_outliers, outlier_count
+            width=self._width, height=self._height, brightness=self._brightness,
+            brightness_variation=self._noise, max_outliers=self._max_outliers, outlier_count=self._outlier_count
         )
 
-        # Модулируем яркость изображения
-        modulated_image = base_brightness + amplitude * ppg_value * (base_image / 255.0)
-        modulated_image = np.clip(modulated_image, 0.0, 255.0)
+        modulation_factor = 1 + (self._amplitude / self._brightness) * ppg_value
+        modulated_image = base_image * modulation_factor
+        modulated_image = np.clip(modulated_image, 0, 255)
 
-        # Обновляем изображение
         img_plot.set_array(modulated_image)
 
-        # Сохраняем историю
         time_history.append(current_time)
-        ppg_history.append(np.mean(modulated_image))  # Средняя яркость
+        ppg_history.append(np.mean(modulated_image))
 
-        # Ограничиваем историю
-        while len(time_history) > history_seconds * fps:
+        while len(time_history) > self._history_seconds * self._fps:
             time_history.popleft()
             ppg_history.popleft()
 
-        # Обновляем график
         line_plot.set_data(time_history, ppg_history)
 
-        # Автомасштабирование
-        ax2.set_xlim(max(0, current_time - history_seconds), max(history_seconds, current_time))
-        ax2.set_ylim(base_brightness - amplitude, base_brightness + amplitude)
+        self._ax2.set_xlim(max(0, current_time - self._history_seconds), max(self._history_seconds, current_time))
+        self._ax2.set_ylim(self._brightness - self._amplitude, self._brightness + self._amplitude)
 
         return img_plot, line_plot
 
-    @staticmethod
-    def display(width=640, height=640,
-                base_brightness=128.0, brightness_variation=10.0,
-                max_outliers=255.0, outlier_count=50,
-                bpm=72, amplitude=50.0,
-                fps=30, history_seconds=15):
-        """Отображение анимации с динамически генерируемым изображением"""
-        global ax2
+    def display(self):
+        """Draw image and ppg curve plots"""
 
-        # Настройка фигуры
         fig = plt.figure(figsize=(12, 6))
         gs = fig.add_gridspec(2, 1, height_ratios=[1, 1])
 
-        # График изображения (первоначально пустой)
+        # Image plot
         ax1 = fig.add_subplot(gs[0])
-        img_plot = ax1.imshow(np.zeros((height, width)), cmap='gray', vmin=0, vmax=255)
+        img_plot = ax1.imshow(np.zeros((self._height, self._width)), cmap='gray', vmin=0, vmax=255)
         plt.colorbar(img_plot, ax=ax1, label='Яркость')
-        ax1.set_title(f"Динамическая 2D визуализация пульса (ЧСС: {bpm} уд/мин)")
+        ax1.set_title(f"2D визуализация пульса (ЧСС: {self._bpm} уд/мин)")
 
-        # График ФПГ
-        ax2 = fig.add_subplot(gs[1])
-        time_history = deque(maxlen=history_seconds * fps)
-        ppg_history = deque(maxlen=history_seconds * fps)
-        line_plot, = ax2.plot([], [], 'r-', linewidth=2)
-        ax2.set_title("Средняя яркость изображения")
-        ax2.set_xlabel("Время (сек)")
-        ax2.set_ylabel("Яркость")
-        ax2.grid(True)
-        ax2.set_xlim(0, history_seconds)
-        ax2.set_ylim(base_brightness - amplitude, base_brightness + amplitude)
+        # PPG plot
+        self._ax2 = fig.add_subplot(gs[1])
+        time_history = deque(maxlen=self._history_seconds * self._fps)
+        ppg_history = deque(maxlen=self._history_seconds * self._fps)
+        line_plot, = self._ax2.plot([], [], 'r-', linewidth=2)
+        self._ax2.set_title("Средняя яркость изображения")
+        self._ax2.set_xlabel("Время (сек)")
+        self._ax2.set_ylabel("Яркость")
+        self._ax2.grid(True)
+        self._ax2.set_xlim(0, self._history_seconds)
+        self._ax2.set_ylim(self._brightness - self._amplitude, self._brightness + self._amplitude)
 
-        # Создание анимации
         ani = animation.FuncAnimation(
             fig,
-            Model.update_image,
-            fargs=(img_plot, line_plot, time_history, ppg_history,
-                   width, height, base_brightness, brightness_variation,
-                   max_outliers, outlier_count, amplitude, bpm, fps, history_seconds),
-            frames=fps * history_seconds * 2,
-            interval=1000 / fps,
+            self.update_image,
+            fargs=(img_plot, line_plot, time_history, ppg_history),
+            frames=self._fps * self._history_seconds * 2,
+            interval=1000 / self._fps,
             blit=False,
-            cache_frame_data=False  # Важно для динамической генерации!
+            cache_frame_data=False
         )
 
         plt.tight_layout()
         plt.show()
-
-
-if __name__ == "__main__":
-
-    Model.display(
-        width=640,
-        height=640,
-        base_brightness=128.0,
-        brightness_variation=100.0,
-        max_outliers=255.0,
-        outlier_count=300,
-        bpm=75,
-        amplitude=60.0,
-        fps=25,
-        history_seconds=10
-    )
