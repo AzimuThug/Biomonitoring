@@ -79,7 +79,8 @@ class Model:
             return 0.4 * np.exp(-10.0 * (phase - 0.3))
 
     def update_image(self, frame, img_plot, line_plot, time_history, ppg_history):
-        """Обновление данных для анимации с перегенерацией изображения"""
+        """Update image and curve data depend on time every frame"""
+
         current_time = frame / self._fps
         ppg_value = Model.generate_1d_ppg(current_time, self._bpm)
 
