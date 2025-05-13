@@ -3,7 +3,7 @@ from scipy import signal
 import matplotlib.pyplot as plt
 
 
-def extract_ppg_autocorr(noisy_signal: np.array, fs: int = 1000, plot: bool = True) -> float:
+def extract_ppg_autocorr(noisy_signal: np.array, fs: int = 250, plot: bool = True) -> float:
     """
     Выделение ФПГ-сигнала из зашумленных данных методом авто или кросс-корреляции
     param:
@@ -61,9 +61,9 @@ def extract_ppg_autocorr(noisy_signal: np.array, fs: int = 1000, plot: bool = Tr
     return heart_rate
 
 
-def extract_ppg_crosscorr(noisy_signal: np.array, fs: int = 1000, plot: bool = True) -> float:
+def extract_ppg_crosscorr(noisy_signal: np.array, fs: int = 250, plot: bool = True) -> float:
     """
-    Выделение ФПГ-сигнала из зашумленных данных методом авто или кросс-корреляции
+    Выделение ФПГ-сигнала из зашумленных данных методом кросс-корреляции
     param:
         noisy_signal - зашумленный ФПГ-сигнал (numpy array)
         fs - частота дискретизации (Гц)
@@ -135,3 +135,61 @@ def extract_ppg_crosscorr(noisy_signal: np.array, fs: int = 1000, plot: bool = T
         plt.show()
 
     return heart_rate
+
+def extract_ppg_fourier(noisy_signal: np.array, fs: int = 256, plot: bool = True) -> float:
+    """
+    Выделение ФПГ-сигнала из зашумленных данных через спектральный анализ
+    param:
+        noisy_signal - зашумленный ФПГ-сигнал (numpy array)
+        fs - частота дискретизации (Гц)
+        plot - визуализировать процесс (True/False)
+
+    return:
+        heart_rate - оценка ЧСС (уд/мин)
+    """
+
+    # 1. Предварительная фильтрация (полосовой фильтр 0.8-2.5 Гц)
+    nyquist = 0.5 * fs
+    low = 0.8 / nyquist
+    high = 2.5 / nyquist
+    b, a = signal.butter(4, [low, high], btype='band')
+    filtered = signal.filtfilt(b, a, noisy_signal)
+
+    n = filtered.size
+    spectrum = np.fft.fft(filtered)
+    amplitudes = np.abs(spectrum) / n
+    frequencies = np.fft.fftfreq(n, d=1/fs)[:n//2]
+    amplitudes = amplitudes[:n//2]
+
+    heart_rate = frequencies[np.argmax(amplitudes)] * 60
+
+    if plot:
+        t = np.arange(len(noisy_signal)) / fs
+        plt.figure(figsize=(15, 8))
+
+        plt.subplot(3, 1, 1)
+        plt.plot(t, noisy_signal, label='Исходный сигнал')
+        plt.title(f'Зашумленный ФПГ (оценка ЧСС: {heart_rate:.1f} уд/мин)')
+        plt.xlabel('Время, с')
+        plt.ylabel('Амплитуда')
+        plt.legend()
+
+        plt.subplot(3, 1, 2)
+        plt.plot(t[:len(filtered)], filtered, 'g', label='После полосовой фильтрации')
+        plt.title('После предварительной фильтрации (0.8-2.5 Гц)')
+        plt.xlabel('Время, с')
+        plt.ylabel('Амплитуда')
+        plt.legend()
+
+        plt.subplot(3, 1, 3)
+        plt.plot(frequencies, amplitudes, 'r')
+        plt.title('Спектр отфильтрованного сигнала')
+        plt.xlabel('Частота, Гц')
+        plt.ylabel('Амплитуда')
+        plt.xlim(0.8, 2.5)
+
+        plt.tight_layout()
+        plt.show()
+
+    return heart_rate
+
