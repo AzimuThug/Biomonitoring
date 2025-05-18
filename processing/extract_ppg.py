@@ -39,6 +39,7 @@ def extract_ppg_autocorr(noisy_signal: np.array, fs: int = 250, plot: bool = Tru
 
     if plot:
         t = np.arange(len(noisy_signal)) / fs
+        lags = np.arange(len(corr)) / fs  # Временные задержки в секундах
         plt.figure(figsize=(15, 8))
 
         plt.subplot(3, 1, 1)
@@ -54,6 +55,15 @@ def extract_ppg_autocorr(noisy_signal: np.array, fs: int = 250, plot: bool = Tru
         plt.xlabel('Время (с)')
         plt.ylabel('Амплитуда')
         plt.legend()
+
+        plt.subplot(3, 1, 3)
+        plt.plot(lags, corr, 'r', label='Автокорреляция')
+        plt.plot(peaks/fs, corr[peaks], 'bo', label='Обнаруженные пики')
+        plt.title('Автокорреляционная функция')
+        plt.xlabel('Задержка (с)')
+        plt.ylabel('Нормированная корреляция')
+        plt.legend()
+        plt.grid(True)
 
         plt.tight_layout()
         plt.show()
