@@ -49,7 +49,10 @@ if __name__ == "__main__":
         bpm=75,
         amplitude=60.0,
         fps=25,
-        history_seconds=10
+        history_seconds=10,
+        low_freq_amplitude=0.3,
+        low_freq_frequency=0.1,
+        high_freq_amplitude=0.25
     )
 
     ppg_model.display()

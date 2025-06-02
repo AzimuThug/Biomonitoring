@@ -13,11 +13,14 @@ class Model:
                  brightness: float = 128.0,
                  brightness_variation: float = 0.0,
                  max_outliers: float = 128.0,
-                 outlier_count: int = 0.0,
+                 outlier_count: int = 0,
                  amplitude: float = 50.0,
                  bpm: int = 72,
                  fps: int = 25,
-                 history_seconds: int = 10
+                 history_seconds: int = 10,
+                 low_freq_amplitude: float = 0.0,
+                 low_freq_frequency: float = 0.1,
+                 high_freq_amplitude: float = 0.0
                  ) -> None:
         self._ax2 = None
         self._width = width
@@ -30,6 +33,9 @@ class Model:
         self._bpm = bpm
         self._fps = fps
         self._history_seconds = history_seconds
+        self._low_freq_amplitude = low_freq_amplitude
+        self._low_freq_frequency = low_freq_frequency
+        self._high_freq_amplitude = high_freq_amplitude
 
     @staticmethod
     def generate_2d_image(width: int = 640,
@@ -83,6 +89,10 @@ class Model:
 
         current_time = frame / self._fps
         ppg_value = Model.generate_1d_ppg(current_time, self._bpm)
+
+        drift = self._low_freq_amplitude * np.sin(2 * np.pi * self._low_freq_frequency * current_time)
+        noise = self._high_freq_amplitude * np.random.uniform(-1, 1)
+        ppg_value += drift + noise
 
         base_image = Model.generate_2d_image(
             width=self._width, height=self._height, brightness=self._brightness,
